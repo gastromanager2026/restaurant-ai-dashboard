@@ -17,6 +17,94 @@ import interactionPlugin from '@fullcalendar/interaction';
 import frLocale from '@fullcalendar/core/locales/fr';
 // ========== FIN FULLCALENDAR ==========
 
+// Fonction pour demander la permission de notifications
+const requestNotificationPermission = async () => {
+  if (!('Notification' in window)) {
+    console.log('❌ Les notifications ne sont pas supportées');
+    return false;
+  }
+  
+  if (Notification.permission === 'granted') {
+    console.log('✅ Permission notifications déjà accordée');
+    return true;
+  }
+  
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('✅ Permission notifications accordée');
+      return true;
+    }
+  }
+  
+  console.log('❌ Permission notifications refusée');
+  return false;
+};
+
+// Fonction pour enregistrer le service worker
+const registerServiceWorker = async () => {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register('/service-worker.js');
+      console.log('✅ Service Worker enregistré:', registration.scope);
+      
+      // Vérifier les mises à jour
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        console.log('🔄 Nouvelle version du Service Worker détectée');
+        
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            console.log('✅ Nouvelle version prête');
+            // Optionnel: Afficher un toast pour informer l'utilisateur
+          }
+        });
+      });
+      
+      return registration;
+    } catch (error) {
+      console.error('❌ Erreur enregistrement Service Worker:', error);
+      return null;
+    }
+  }
+  return null;
+};
+
+// Fonction pour envoyer une notification
+const sendNotification = (title, options = {}) => {
+  if (!('Notification' in window)) {
+    console.log('❌ Notifications non supportées');
+    return;
+  }
+  
+  if (Notification.permission !== 'granted') {
+    console.log('❌ Permission notifications non accordée');
+    return;
+  }
+  
+  const defaultOptions = {
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-72x72.png',
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    ...options
+  };
+  
+  // Si service worker disponible, utiliser showNotification
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then((registration) => {
+      registration.showNotification(title, defaultOptions);
+    });
+  } else {
+    // Sinon utiliser Notification API directe
+    new Notification(title, defaultOptions);
+  }
+};
+
+
+
+
+
 const calendarStyles = `
   .fc {
     font-family: inherit;
@@ -134,6 +222,8 @@ export default function App() {
   const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);  
   const [dashboardPeriod, setDashboardPeriod] = useState('today'); // 'today', 'week', 'month', 'all'
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [swRegistration, setSwRegistration] = useState(null);
 
 
 
@@ -213,43 +303,117 @@ export default function App() {
     }
   }, []);
 
-  // ========== SUPABASE REALTIME ========== 
+
+  // useEffect POUR INITIALISER LE PWA ===== //
+
+useEffect(() => {
+  // Enregistrer le service worker
+  const initPWA = async () => {
+    const registration = await registerServiceWorker();
+    setSwRegistration(registration);
+    
+    // Demander permission notifications
+    const hasPermission = await requestNotificationPermission();
+    setNotificationsEnabled(hasPermission);
+  };
+  
+  initPWA();
+  
+  // Détecter si installé comme PWA
+  window.addEventListener('appinstalled', () => {
+    console.log('🎉 PWA installée !');
+    toast.success('Application installée avec succès !');
+  });
+  
+  // Détecter mode standalone (installé)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  if (isStandalone) {
+    console.log('📱 Application lancée en mode standalone');
+  }
+}, []);
+
+
+
+
+  // ========== useEffect SUPABASE REALTIME ========== 
   useEffect(() => {
-    if (!isLoggedIn) return;
+  if (!isLoggedIn) return;
 
-    loadData();
+  loadData();
 
-    const ordersChannel = supabase
-      .channel('orders-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        console.log('🔄 Changement orders:', payload);
-        loadData();
+  const ordersChannel = supabase
+    .channel('orders-channel')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+      console.log('🔄 Changement orders:', payload);
+      loadData();
+      
+      if (payload.eventType === 'INSERT') {
+        const newOrder = payload.new;
+        toast.success('📦 Nouvelle commande !');
+        playNotificationSound();
         
-        if (payload.eventType === 'INSERT') {
-          toast.success('📦 Nouvelle commande !');
-          playNotificationSound();
+        // ========== NOUVEAU : NOTIFICATION PWA ==========
+        if (notificationsEnabled) {
+          sendNotification('🍔 Nouvelle commande !', {
+            body: `Commande #${newOrder.order_number || 'N/A'} - ${newOrder.total}€`,
+            tag: `order-${newOrder.id}`,
+            data: {
+              url: '/?section=kitchen',
+              orderId: newOrder.id
+            },
+            actions: [
+              {
+                action: 'view',
+                title: '👀 Voir',
+                icon: '/icons/icon-96x96.png'
+              }
+            ]
+          });
         }
-      })
-      .subscribe();
+        // ========== FIN NOUVEAU CODE ==========
+      }
+    })
+    .subscribe();
 
-    const reservationsChannel = supabase
-      .channel('reservations-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, (payload) => {
-        console.log('🔄 Changement reservations:', payload);
-        loadData();
+  const reservationsChannel = supabase
+    .channel('reservations-channel')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, (payload) => {
+      console.log('🔄 Changement reservations:', payload);
+      loadData();
+      
+      if (payload.eventType === 'INSERT') {
+        const newReservation = payload.new;
+        toast.success('📅 Nouvelle réservation !');
+        playNotificationSound();
         
-        if (payload.eventType === 'INSERT') {
-          toast.success('📅 Nouvelle réservation !');
-          playNotificationSound();
+        // ========== NOUVEAU : NOTIFICATION PWA ==========
+        if (notificationsEnabled) {
+          sendNotification('📅 Nouvelle réservation !', {
+            body: `${newReservation.customer_name} - ${newReservation.number_of_people} pers.\n${newReservation.date} à ${newReservation.time}`,
+            tag: `reservation-${newReservation.id}`,
+            data: {
+              url: '/?section=reservations',
+              reservationId: newReservation.id
+            },
+            actions: [
+              {
+                action: 'view',
+                title: '👀 Voir',
+                icon: '/icons/icon-96x96.png'
+              }
+            ]
+          });
         }
-      })
-      .subscribe();
+        // ========== FIN NOUVEAU CODE ==========
+      }
+    })
+    .subscribe();
 
-    return () => {
-      ordersChannel.unsubscribe();
-      reservationsChannel.unsubscribe();
-    };
-  }, [isLoggedIn, currentUser, selectedRestaurant, loadData]);
+  return () => {
+    ordersChannel.unsubscribe();
+    reservationsChannel.unsubscribe();
+  };
+}, [isLoggedIn, currentUser, selectedRestaurant, loadData, notificationsEnabled]); // ← Ajouter notificationsEnabled
 
   // ========== Restaurer session ========== 
   useEffect(() => {
@@ -1191,6 +1355,37 @@ const filterDashboardData = (items, dateField = 'created_at') => {
       {!selectedRestaurant && currentUser.role === 'super_admin' && (
         <p className="text-gray-500 mt-1">Vue globale</p>
       )}
+      <div className="mb-6 flex justify-end">
+        
+      <button
+      // UN BOUTON TOGGLE NOTIFICATIONS DANS LE DASHBOARD
+        onClick={async () => {
+          if (!notificationsEnabled) {
+            const granted = await requestNotificationPermission();
+            setNotificationsEnabled(granted);
+            if (granted) {
+              toast.success('🔔 Notifications activées !');
+              // Test notification
+              sendNotification('🎉 Notifications activées !', {
+                body: 'Vous recevrez maintenant les alertes en temps réel',
+                requireInteraction: true
+              });
+            } else {
+              toast.error('❌ Permission refusée');
+            }
+          } else {
+            toast.info('✅ Notifications déjà activées');
+          }
+        }}
+        className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+          notificationsEnabled 
+            ? 'bg-green-600 text-white hover:bg-green-700' 
+            : 'bg-blue-600 text-white hover:bg-blue-700'
+        }`}
+      >
+        {notificationsEnabled ? '🔔 Notifications ON' : '🔕 Activer notifications'}
+      </button>
+    </div>
     </div>
                   {/* Sélecteur de période */}
                   <div className="flex gap-2 bg-white rounded-lg shadow p-1 mb-8 w-fit">
@@ -1391,6 +1586,8 @@ const filterDashboardData = (items, dateField = 'created_at') => {
                 </motion.div>
               </div>
             </motion.div>
+
+            
           )}
 
           {/* Section Restaurants (super_admin only) */}
