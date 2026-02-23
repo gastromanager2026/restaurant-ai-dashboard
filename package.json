@@ -18,13 +18,13 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.89.0",
     "bcryptjs": "^3.0.3",
-    "framer-motion": "^12.23.26",
+    "framer-motion": "^12.34.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-calendar": "^6.0.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
-    "recharts": "^3.6.0"
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

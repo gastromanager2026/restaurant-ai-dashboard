@@ -6,6 +6,8 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { motion, AnimatePresence } from 'framer-motion'; 
 import toast, { Toaster } from 'react-hot-toast';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import AdvancedAnalytics from './AdvancedAnalytics'; // ← NOUVEAU
+
 
 
 
@@ -1356,7 +1358,7 @@ const filterDashboardData = (items, dateField = 'created_at') => {
         <p className="text-gray-500 mt-1">Vue globale</p>
       )}
       <div className="mb-6 flex justify-end">
-        
+
       <button
       // UN BOUTON TOGGLE NOTIFICATIONS DANS LE DASHBOARD
         onClick={async () => {
@@ -1429,6 +1431,18 @@ const filterDashboardData = (items, dateField = 'created_at') => {
                     >
                       📊 Total
                     </button>
+                                      <motion.button
+                    whileHover={{ x: 5 }}
+                    onClick={() => setActiveSection('analytics')}
+                    className={`w-full flex items-center px-3 py-3 rounded-lg transition-all ${
+                      activeSection === 'analytics'
+                        ? 'bg-orange-600 text-white shadow-lg'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    <span className="text-xl mr-3">📊</span>
+                    {!sidebarCollapsed && <span>Analytics</span>}
+                  </motion.button>
                   </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -1585,6 +1599,23 @@ const filterDashboardData = (items, dateField = 'created_at') => {
                   </div>
                 </motion.div>
               </div>
+                            {/* ========== NOUVELLE SECTION ANALYTICS ========== */}
+      {activeSection === 'analytics' && (
+        <motion.div
+          key="analytics"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3 }}
+          className="space-y-6"
+        >
+          <AdvancedAnalytics 
+            orders={data.orders}
+            reservations={data.reservations}
+            menuItems={data.menuItems}
+          />
+        </motion.div>
+      )}
             </motion.div>
 
             
