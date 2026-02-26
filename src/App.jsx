@@ -1599,27 +1599,13 @@ const filterDashboardData = (items, dateField = 'created_at') => {
                   </div>
                 </motion.div>
               </div>
-                            {/* ========== NOUVELLE SECTION ANALYTICS ========== */}
-      {activeSection === 'analytics' && (
-        <motion.div
-          key="analytics"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-          className="space-y-6"
-        >
-          <AdvancedAnalytics 
-            orders={data.orders}
-            reservations={data.reservations}
-            menuItems={data.menuItems}
-          />
-        </motion.div>
-      )}
+                   {/* ========== NOUVELLE SECTION ANALYTICS ========== */}
+      
             </motion.div>
 
             
           )}
+          
 
           {/* Section Restaurants (super_admin only) */}
           {activeSection === 'restaurants' && currentUser.role === 'super_admin' && (
